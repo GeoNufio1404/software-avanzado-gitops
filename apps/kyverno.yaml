@@ -5,8 +5,12 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "0"
+  # Los pre-delete los agrega ArgoCD porque el chart tiene hooks de borrado;
+  # se declaran aqui para que la app raiz no los vea como diferencia.
   finalizers:
     - resources-finalizer.argocd.argoproj.io
+    - pre-delete-finalizer.argocd.argoproj.io
+    - pre-delete-finalizer.argocd.argoproj.io/cleanup
 spec:
   project: default
   source:
