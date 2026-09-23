@@ -15,11 +15,13 @@ spec:
     targetRevision: 3.9.1
     helm:
       valuesObject:
-        # Sin esto el subchart genera "labels: {}" en sus CRDs, el API server
-        # lo descarta y ArgoCD ve la app OutOfSync de forma permanente.
+        # Sin esto el subchart genera "labels: {}" y "annotations: {}" en sus
+        # CRDs, el API server los descarta y ArgoCD ve la app OutOfSync.
         kyverno-api:
           labels:
             app.kubernetes.io/part-of: kyverno
+          annotations:
+            policies.kyverno.io/managed-by: argocd
   destination:
     server: https://kubernetes.default.svc
     namespace: kyverno
