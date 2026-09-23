@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-cronjob2-sa
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-cronjob2-role
+  namespace: {{ .Release.Namespace }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-cronjob2-rb
+  namespace: {{ .Release.Namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-cronjob2-sa
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ .Release.Name }}-cronjob2-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-cronjob-resumen
+  namespace: {{ .Release.Namespace }}
+spec:
+  schedule: "*/10 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          serviceAccountName: {{ .Release.Name }}-cronjob2-sa
+          restartPolicy: Never
+          securityContext:
+            {{- include "sa.securityContext" (dict "root" $) | nindent 12 }}
+          containers:
+            - name: resumen
+              image: {{ required "cronjobs.resumenImage es obligatorio" .Values.cronjobs.resumenImage }}
+              env:
+                - name: DB_HOST
+                  value: {{ .Values.cronjobs.dbHost | default "sa-platform-mysql" | quote }}
+                - name: DB_NAME
+                  value: {{ .Values.cronjobs.dbName | default "auth_db" | quote }}
+                - name: RABBITMQ_HOST
+                  value: {{ .Values.cronjobs.rabbitmqHost | default "sa-platform-rabbitmq" | quote }}
+                - name: RABBITMQ_QUEUE
+                  value: "resumen.heartbeat"
+                - name: TZ
+                  value: "America/Guatemala"
+              envFrom:
+                - secretRef:
+                    name: {{ .Release.Name }}-db-credentials
+                - secretRef:
+                    name: {{ .Release.Name }}-broker-credentials
+              resources:
+                {{- toYaml .Values.cronjobs.resources | nindent 16 }}
+              securityContext:
+                {{- include "sa.containerSecurityContext" (dict "root" $) | nindent 16 }}

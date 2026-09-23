@@ -1,0 +1,89 @@
+{{- if and .Values.enabled .Values.rollout.enabled }}
+{{- $fullname := include "sa.fullname" (dict "root" $ "name" .Chart.Name) }}
+{{- $a := .Values.rollout.analysis }}
+# Prueba de humo con k6 contra la version candidata (Service -canary).
+# k6 termina con codigo != 0 si se supera un umbral -> el Job falla ->
+# el AnalysisRun falla -> Argo Rollouts aborta y vuelve a la version estable.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}-smoke
+  namespace: {{ .Release.Namespace }}
+data:
+  smoke.js: |
+    import http from "k6/http";
+    import { check } from "k6";
+
+    const BASE = __ENV.BASE_URL;
+
+    // 401 es la respuesta correcta a un login invalido: no cuenta como fallo.
+    http.setResponseCallback(http.expectedStatuses(200, 401));
+
+    export const options = {
+      vus: {{ $a.vus }},
+      duration: "{{ $a.duration }}",
+      thresholds: {
+        http_req_failed: ["rate<{{ $a.maxFailedRate }}"],
+        http_req_duration: ["p(95)<{{ $a.p95Ms }}"],
+        checks: ["rate==1.0"],
+      },
+    };
+
+    export default function () {
+      // /health del gateway consulta el /health de los 4 servicios internos
+      // (siempre responde 200: el estado real viene en el cuerpo).
+      const health = http.get(`${BASE}/health`);
+      check(health, {
+        "health 200": (r) => r.status === 200,
+        "servicios ok": (r) =>
+          Object.values(r.json("servicios") || {}).every((s) => s === "ok"),
+      });
+
+      // Enrutamiento gateway -> auth-service -> MySQL.
+      const login = http.post(
+        `${BASE}/api/auth/login`,
+        JSON.stringify({ username: "k6-smoke", password: "invalida" }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+      check(login, { "login invalido 401": (r) => r.status === 401 });
+    }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ $fullname }}-smoke
+  namespace: {{ .Release.Namespace }}
+spec:
+  metrics:
+    - name: k6-smoke
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            ttlSecondsAfterFinished: 600
+            template:
+              spec:
+                restartPolicy: Never
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 12345
+                containers:
+                  - name: k6
+                    image: {{ $a.image }}
+                    args: ["run", "--quiet", "/scripts/smoke.js"]
+                    env:
+                      - name: BASE_URL
+                        value: http://{{ $fullname }}-canary:{{ .Values.service.port }}
+                    resources:
+                      requests: { cpu: 100m, memory: 128Mi }
+                      limits: { cpu: 300m, memory: 256Mi }
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                    volumeMounts:
+                      - name: scripts
+                        mountPath: /scripts
+                volumes:
+                  - name: scripts
+                    configMap:
+                      name: {{ $fullname }}-smoke
+{{- end }}

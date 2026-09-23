@@ -1,0 +1,39 @@
+# Wave 2: la plataforma PrintHub (microservicios, MySQL, RabbitMQ, cronjobs).
+# El namespace sa-p9 lo crea Terraform (con su cuota, limites y RBAC).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sa-platform
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/GeoNufio1404/software-avanzado-gitops.git
+    targetRevision: main
+    path: charts/sa-platform
+    helm:
+      releaseName: sa-platform
+      valueFiles:
+        - values.yaml
+        - values-gke.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: sa-p9
+  # El HPA ajusta las replicas; ArgoCD no debe revertirlas.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers: [/spec/replicas]
+    - group: argoproj.io
+      kind: Rollout
+      jsonPointers: [/spec/replicas]
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [RespectIgnoreDifferences=true]
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }

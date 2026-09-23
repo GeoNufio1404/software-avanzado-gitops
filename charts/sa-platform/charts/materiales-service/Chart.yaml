@@ -1,0 +1,6 @@
+apiVersion: v2
+name: materiales-service
+description: Microservicio de inventario de filamento (GraphQL, Python/FastAPI/Strawberry)
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

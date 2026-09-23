@@ -1,0 +1,64 @@
+global:
+  logLevel: warn
+
+auth-service:
+  replicaCount: 3
+  image:
+    tag: "1.0.0"
+  resources:
+    requests: { cpu: 150m, memory: 192Mi }
+    limits: { cpu: 500m, memory: 384Mi }
+  autoscaling:
+    minReplicas: 3
+    maxReplicas: 5
+
+materiales-service:
+  replicaCount: 3
+  image:
+    tag: "1.0.0"
+  resources:
+    requests: { cpu: 150m, memory: 192Mi }
+    limits: { cpu: 500m, memory: 384Mi }
+  autoscaling:
+    minReplicas: 3
+    maxReplicas: 5
+
+figuras-service:
+  replicaCount: 3
+  image:
+    tag: "1.0.0"
+  resources:
+    requests: { cpu: 150m, memory: 192Mi }
+    limits: { cpu: 500m, memory: 384Mi }
+  autoscaling:
+    minReplicas: 3
+    maxReplicas: 5
+
+ordenes-service:
+  replicaCount: 3
+  image:
+    tag: "1.0.0"
+  resources:
+    requests: { cpu: 150m, memory: 192Mi }
+    limits: { cpu: 500m, memory: 384Mi }
+  autoscaling:
+    minReplicas: 3
+    maxReplicas: 5
+
+api-gateway:
+  replicaCount: 3
+  image:
+    tag: "1.0.0"
+  resources:
+    requests: { cpu: 150m, memory: 192Mi }
+    limits: { cpu: 500m, memory: 384Mi }
+  autoscaling:
+    minReplicas: 3
+    maxReplicas: 5
+  ingress:
+    host: sa-p5.prod.local
+
+mysql:
+  primary:
+    persistence:
+      size: 4Gi

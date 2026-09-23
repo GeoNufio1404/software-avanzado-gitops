@@ -1,0 +1,49 @@
+global:
+  logLevel: debug
+
+auth-service:
+  replicaCount: 1
+  image:
+    tag: "dev"
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 150m, memory: 128Mi }
+
+materiales-service:
+  replicaCount: 1
+  image:
+    tag: "dev"
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 150m, memory: 128Mi }
+
+figuras-service:
+  replicaCount: 1
+  image:
+    tag: "dev"
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 150m, memory: 128Mi }
+
+ordenes-service:
+  replicaCount: 1
+  image:
+    tag: "dev"
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 150m, memory: 128Mi }
+
+api-gateway:
+  replicaCount: 1
+  image:
+    tag: "dev"
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 150m, memory: 128Mi }
+  ingress:
+    host: sa-p5.dev.local
+
+mysql:
+  primary:
+    persistence:
+      size: 512Mi

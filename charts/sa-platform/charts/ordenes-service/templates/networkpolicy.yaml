@@ -1,0 +1,54 @@
+{{- if .Values.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "sa.fullname" (dict "root" $ "name" .Chart.Name) }}-netpol
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "sa.selectorLabels" (dict "root" $ "name" .Chart.Name) | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        {{- range .Values.networkPolicy.allowFrom }}
+        - podSelector:
+            matchLabels:
+              sa-platform/component: {{ . }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.service.port }}
+  egress:
+    {{- range .Values.networkPolicy.egressTo }}
+    - to:
+        - podSelector:
+            matchLabels:
+              sa-platform/component: {{ .component }}
+      ports:
+        - port: {{ .port }}
+    {{- end }}
+    {{- if .Values.networkPolicy.egressMysql }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: mysql
+      ports:
+        - port: 3306
+    {{- end }}
+    {{- if .Values.networkPolicy.egressRabbitmq }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: rabbitmq
+      ports:
+        - port: 5672
+    {{- end }}
+    - to: []
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+{{- end }}

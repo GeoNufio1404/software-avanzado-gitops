@@ -1,0 +1,39 @@
+enabled: true
+replicaCount: 1
+image:
+  repository: sa-platform/ordenes-service
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+service:
+  port: 8003
+resources:
+  requests: { cpu: 100m, memory: 128Mi }
+  limits: { cpu: 300m, memory: 256Mi }
+autoscaling:
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+podDisruptionBudget:
+  minAvailable: 1
+probes:
+  liveness: { path: /health, initialDelaySeconds: 15, periodSeconds: 10 }
+  readiness: { path: /health, initialDelaySeconds: 5, periodSeconds: 5 }
+  startup: { path: /health, failureThreshold: 30, periodSeconds: 2 }
+networkPolicy:
+  allowFrom: ["api-gateway"]
+  egressTo:
+    - component: figuras-service
+      port: 8002
+  egressMysql: false
+  egressRabbitmq: true
+needsDbSecret: false
+needsAppSecret: false
+needsBrokerSecret: true
+env: {}
+extraEnv:
+  - name: LOG_LEVEL
+    value: "info"
+  - name: BROKER_PREFETCH
+    value: "1"
+  - name: TZ
+    value: "America/Guatemala"

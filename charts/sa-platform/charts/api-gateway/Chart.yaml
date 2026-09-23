@@ -1,0 +1,6 @@
+apiVersion: v2
+name: api-gateway
+description: Microservicio de autenticacion (JWT + AES-256-GCM + bcrypt) sobre MySQL
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

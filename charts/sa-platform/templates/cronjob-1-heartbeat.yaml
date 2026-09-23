@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-cronjob1-sa
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-cronjob1-role
+  namespace: {{ .Release.Namespace }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-cronjob1-rb
+  namespace: {{ .Release.Namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-cronjob1-sa
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ .Release.Name }}-cronjob1-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-cronjob-heartbeat
+  namespace: {{ .Release.Namespace }}
+spec:
+  schedule: "*/2 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          serviceAccountName: {{ .Release.Name }}-cronjob1-sa
+          restartPolicy: Never
+          securityContext:
+            {{- include "sa.securityContext" (dict "root" $) | nindent 12 }}
+          containers:
+            - name: heartbeat
+              image: {{ required "cronjobs.heartbeatImage es obligatorio" .Values.cronjobs.heartbeatImage }}
+              env:
+                - name: DB_HOST
+                  value: {{ .Values.cronjobs.dbHost | default "sa-platform-mysql" | quote }}
+                - name: DB_NAME
+                  value: {{ .Values.cronjobs.dbName | default "auth_db" | quote }}
+                - name: TZ
+                  value: "America/Guatemala"
+                - name: CARNE
+                  value: {{ required "cronjobs.carne es obligatorio" .Values.cronjobs.carne | quote }}
+              envFrom:
+                - secretRef:
+                    name: {{ .Release.Name }}-db-credentials
+              resources:
+                {{- toYaml .Values.cronjobs.resources | nindent 16 }}
+              securityContext:
+                {{- include "sa.containerSecurityContext" (dict "root" $) | nindent 16 }}

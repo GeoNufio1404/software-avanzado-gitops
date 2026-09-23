@@ -1,0 +1,73 @@
+# Ambiente GKE (P9). Se aplica encima de values.yaml.
+# El pipeline de CI solo modifica las lineas "tag:" de este archivo mediante
+# un Pull Request (nunca despliega directamente).
+
+global:
+  namespace: sa-p9
+  # Vacio: los servicios usan el repository completo de Artifact Registry y
+  # MySQL/RabbitMQ se descargan de docker.io.
+  imageRegistry: ""
+  logLevel: info
+
+mysql:
+  primary:
+    persistence:
+      enabled: true
+      storageClass: standard
+
+rabbitmq:
+  persistence:
+    enabled: true
+    storageClass: standard
+
+# 2 replicas por servicio + anti-afinidad + PDB (minAvailable 1):
+# el servicio sigue respondiendo mientras se drena un nodo.
+auth-service:
+  replicaCount: 2
+  autoscaling:
+    minReplicas: 2
+  image:
+    repository: us-central1-docker.pkg.dev/project-2cbee419-ed7b-469e-89d/sa-p9/auth-service
+    tag: "1.0.0"
+
+materiales-service:
+  replicaCount: 2
+  autoscaling:
+    minReplicas: 2
+  image:
+    repository: us-central1-docker.pkg.dev/project-2cbee419-ed7b-469e-89d/sa-p9/materiales-service
+    tag: "1.0.0"
+
+figuras-service:
+  replicaCount: 2
+  autoscaling:
+    minReplicas: 2
+  image:
+    repository: us-central1-docker.pkg.dev/project-2cbee419-ed7b-469e-89d/sa-p9/figuras-service
+    tag: "1.0.0"
+
+ordenes-service:
+  replicaCount: 2
+  autoscaling:
+    minReplicas: 2
+  image:
+    repository: us-central1-docker.pkg.dev/project-2cbee419-ed7b-469e-89d/sa-p9/ordenes-service
+    tag: "1.0.0"
+
+api-gateway:
+  replicaCount: 2
+  autoscaling:
+    minReplicas: 2
+  image:
+    repository: us-central1-docker.pkg.dev/project-2cbee419-ed7b-469e-89d/sa-p9/api-gateway
+    tag: "1.0.0"
+  rollout:
+    enabled: true
+  ingress:
+    enabled: true
+    className: gce
+    host: ""
+
+cronjobs:
+  heartbeatImage: "us-central1-docker.pkg.dev/project-2cbee419-ed7b-469e-89d/sa-p9/cronjob-heartbeat:1.0.0"
+  resumenImage: "us-central1-docker.pkg.dev/project-2cbee419-ed7b-469e-89d/sa-p9/cronjob-resumen:1.0.0"

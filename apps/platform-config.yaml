@@ -1,0 +1,21 @@
+# Wave 1: configuracion que depende de los CRDs de la wave 0
+# (politicas de Kyverno y ClusterSecretStore de External Secrets).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-config
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/GeoNufio1404/software-avanzado-gitops.git
+    targetRevision: main
+    path: config
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }

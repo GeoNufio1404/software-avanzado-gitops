@@ -1,0 +1,12 @@
+{{- if .Values.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sa.fullname" (dict "root" $ "name" .Chart.Name) }}-config
+  namespace: {{ .Release.Namespace }}
+data:
+  LOG_LEVEL: {{ $.Values.global.logLevel | default "info" | quote }}
+  {{- range $key, $value := .Values.env }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+{{- end }}
