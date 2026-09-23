@@ -4,8 +4,15 @@ kind: Ingress
 metadata:
   name: {{ include "sa.fullname" (dict "root" $ "name" .Chart.Name) }}-ingress
   namespace: {{ .Release.Namespace }}
+  {{- if eq .Values.ingress.className "gce" }}
+  # GKE no crea un IngressClass "gce": su controlador solo reconoce la anotacion.
+  annotations:
+    kubernetes.io/ingress.class: gce
+  {{- end }}
 spec:
+  {{- if ne .Values.ingress.className "gce" }}
   ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
   {{- if .Values.ingress.host }}
   rules:
     - host: {{ .Values.ingress.host }}
