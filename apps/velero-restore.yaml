@@ -1,0 +1,25 @@
+# Wave 1: restauracion de datos antes de desplegar la plataforma.
+# Su Job queda "Progressing" mientras Velero restaura el volumen de MySQL, y
+# la wave 2 (sa-platform) no arranca hasta que termine. Asi ArgoCD nunca crea
+# un PVC vacio antes de la restauracion. Con el cluster en operacion (el PVC
+# ya existe) el Job termina de inmediato sin tocar nada.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: velero-restore
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/GeoNufio1404/software-avanzado-gitops.git
+    targetRevision: main
+    path: restore
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: velero
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }

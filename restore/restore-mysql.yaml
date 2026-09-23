@@ -1,0 +1,160 @@
+# Restauracion de MySQL (servicio con estado de P9) al reconstruir el cluster.
+#
+# Se restaura solo lo etiquetado como MySQL (StatefulSet, pod, PVC/PV,
+# ConfigMaps y ServiceAccount). Velero escribe los datos en el volumen nuevo
+# con File System Backup; despues ArgoCD adopta el StatefulSet al sincronizar
+# sa-platform y External Secrets crea el secreto que el contenedor espera.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: restore-mysql
+  namespace: velero
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: restore-mysql
+  namespace: velero
+rules:
+  - apiGroups: [velero.io]
+    resources: [backups, backupstoragelocations]
+    verbs: [get, list]
+  - apiGroups: [velero.io]
+    resources: [restores]
+    verbs: [get, create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: restore-mysql
+  namespace: velero
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: restore-mysql
+subjects:
+  - kind: ServiceAccount
+    name: restore-mysql
+    namespace: velero
+---
+# Solo para saber si el volumen ya existe.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: restore-mysql
+  namespace: sa-p9
+rules:
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: restore-mysql
+  namespace: sa-p9
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: restore-mysql
+subjects:
+  - kind: ServiceAccount
+    name: restore-mysql
+    namespace: velero
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: restore-mysql
+  namespace: velero
+  annotations:
+    # El spec de un Job es inmutable: si cambia, ArgoCD lo recrea.
+    argocd.argoproj.io/sync-options: Replace=true
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 1800
+  template:
+    spec:
+      serviceAccountName: restore-mysql
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      containers:
+        - name: restore
+          image: docker.io/bitnamilegacy/kubectl:1.33.4-debian-12-r0
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          command: [bash, -c]
+          args:
+            - |
+              set -euo pipefail
+              log() { echo "$(date -Is) $*"; }
+              PVC=data-sa-platform-mysql-0
+              SCHEDULE=sa-p9-hourly
+
+              if kubectl get pvc "$PVC" -n sa-p9 >/dev/null 2>&1; then
+                log "El PVC $PVC ya existe (cluster en operacion): no se restaura nada."
+                exit 0
+              fi
+
+              log "Esperando que el BackupStorageLocation este Available..."
+              until [ "$(kubectl get backupstoragelocation default -n velero -o jsonpath='{.status.phase}' 2>/dev/null)" = Available ]; do
+                sleep 5
+              done
+
+              # Al arrancar, Velero copia al cluster los respaldos que hay en el bucket.
+              log "Buscando el ultimo respaldo Completed del schedule $SCHEDULE..."
+              BACKUP=""
+              for _ in $(seq 1 60); do
+                BACKUP=$(kubectl get backups.velero.io -n velero -l velero.io/schedule-name=$SCHEDULE \
+                  --sort-by=.status.startTimestamp \
+                  -o jsonpath='{range .items[?(@.status.phase=="Completed")]}{.metadata.name}{"\n"}{end}' | tail -n1)
+                [ -n "$BACKUP" ] && break
+                sleep 5
+              done
+              if [ -z "$BACKUP" ]; then
+                log "AVISO: no hay respaldos del schedule $SCHEDULE; MySQL arrancara con el volumen vacio."
+                exit 0
+              fi
+
+              RESTORE="restore-mysql-$BACKUP"
+              log "Restaurando MySQL desde $BACKUP (Restore $RESTORE)"
+              if ! kubectl get restore "$RESTORE" -n velero >/dev/null 2>&1; then
+                kubectl create -f - <<EOF
+              apiVersion: velero.io/v1
+              kind: Restore
+              metadata:
+                name: $RESTORE
+                namespace: velero
+              spec:
+                backupName: $BACKUP
+                includedNamespaces: [sa-p9]
+                # persistentvolumes: sin el PV, Velero no limpia el enlace del PVC
+                # al volumen original y el PVC queda Pending.
+                includedResources: [serviceaccounts, configmaps, persistentvolumeclaims, persistentvolumes, pods, statefulsets]
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/instance: sa-platform
+                    app.kubernetes.io/name: mysql
+                restorePVs: true
+              EOF
+              fi
+
+              while true; do
+                PHASE=$(kubectl get restore "$RESTORE" -n velero -o jsonpath='{.status.phase}')
+                case "$PHASE" in
+                  Completed)
+                    log "Restauracion completada: $(kubectl get restore "$RESTORE" -n velero -o jsonpath='{.status.progress}')"
+                    exit 0 ;;
+                  PartiallyFailed|Failed|FailedValidation)
+                    log "ERROR: la restauracion termino en $PHASE: $(kubectl get restore "$RESTORE" -n velero -o jsonpath='{.status}')"
+                    exit 1 ;;
+                esac
+                log "Restore en fase ${PHASE:-Pendiente}..."
+                sleep 10
+              done
