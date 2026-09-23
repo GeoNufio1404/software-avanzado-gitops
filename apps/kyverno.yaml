@@ -16,7 +16,13 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: kyverno
+  # El chart genera "labels: {}" en algunos CRDs y el API server lo descarta:
+  # sin esto la app queda OutOfSync de forma permanente.
+  ignoreDifferences:
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+      jsonPointers: [/metadata/labels]
   syncPolicy:
     automated: { prune: true, selfHeal: true }
     # Los CRDs de Kyverno exceden el limite de anotaciones de client-side apply.
-    syncOptions: [CreateNamespace=true, ServerSideApply=true]
+    syncOptions: [CreateNamespace=true, ServerSideApply=true, RespectIgnoreDifferences=true]
