@@ -26,7 +26,11 @@ rollout:
   analysis:
     image: grafana/k6:2.3.0
     # Umbrales de promocion (justificados en P9/docs).
+    # Hasta 1 % de peticiones/comprobaciones fallidas: tolera un fallo aislado
+    # (p. ej. un /health interno que excede su timeout de 2 s bajo carga) pero
+    # detecta una version defectuosa, que falla de forma sistematica.
     maxFailedRate: "0.01"
+    minChecksRate: "0.99"
     p95Ms: 500
     vus: 5
     duration: 30s
