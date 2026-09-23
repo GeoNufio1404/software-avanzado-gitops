@@ -37,6 +37,21 @@ mysql:
     registry: docker.io
     repository: bitnamilegacy/mysql
     tag: "8.0.35-debian-11-r0"
+  # Script de inicializacion (solo corre con el volumen vacio). En el chart
+  # de Bitnami 9.x la clave es initdbScripts (primary.initdb no existe).
+  initdbScripts:
+    init.sql: |
+      USE auth_db;
+      CREATE TABLE IF NOT EXISTS usuarios (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(50) NOT NULL UNIQUE,
+        email_cifrado TEXT NOT NULL,
+        email_iv VARCHAR(32) NOT NULL,
+        email_auth_tag VARCHAR(32) NOT NULL,
+        password_hash VARCHAR(60) NOT NULL,
+        rol ENUM('cliente', 'admin') NOT NULL DEFAULT 'cliente',
+        creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
   primary:
     resourcesPreset: "none"
     resources:
@@ -46,19 +61,6 @@ mysql:
       limits:
         cpu: 250m
         memory: 768Mi
-    initdb:
-      scripts:
-        init.sql: |
-          CREATE TABLE IF NOT EXISTS usuarios (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(50) NOT NULL UNIQUE,
-            email_cifrado TEXT NOT NULL,
-            email_iv VARCHAR(32) NOT NULL,
-            email_auth_tag VARCHAR(32) NOT NULL,
-            password_hash VARCHAR(60) NOT NULL,
-            rol ENUM('cliente', 'admin') NOT NULL DEFAULT 'cliente',
-            creado_en DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-          );
 
 rabbitmq:
   enabled: true
