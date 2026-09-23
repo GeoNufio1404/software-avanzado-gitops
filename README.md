@@ -14,7 +14,7 @@ apps/                       Applications hijas del app-of-apps (raíz: root-sa-p
   argo-rollouts.yaml        wave 0  Argo Rollouts
   kyverno.yaml              wave 0  Kyverno
   external-secrets.yaml     wave 0  External Secrets Operator (Workload Identity)
-  velero.yaml               wave 0  Velero + schedule sa-p9-hourly → gs://sa-p9-velero-201901444
+  velero.yaml               wave 0  Velero + schedule velero-sa-p9-hourly → gs://sa-p9-velero-201901444
   platform-config.yaml      wave 1  carpeta config/
   velero-restore.yaml       wave 1  carpeta restore/ (restaura MySQL antes de la wave 2)
   sa-platform.yaml          wave 2  chart charts/sa-platform en el namespace sa-p9
@@ -23,7 +23,7 @@ config/
   kyverno-policies.yaml     disallow-latest-tag, require-resource-limits, require-run-as-non-root
 restore/
   restore-mysql.yaml        Job que, si no existe el volumen de MySQL, lo restaura desde el
-                            último respaldo de sa-p9-hourly y bloquea la wave 2 hasta terminar
+                            último respaldo de velero-sa-p9-hourly y bloquea la wave 2 hasta terminar
 charts/sa-platform/         chart padre + un subchart por microservicio
   values.yaml               valores base
   values-dev.yaml / values-prod.yaml / values-gke.yaml   valores por ambiente (ArgoCD usa values-gke)

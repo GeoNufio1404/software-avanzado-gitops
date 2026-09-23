@@ -95,7 +95,7 @@ spec:
               set -euo pipefail
               log() { echo "$(date -Is) $*"; }
               PVC=data-sa-platform-mysql-0
-              SCHEDULE=sa-p9-hourly
+              SCHEDULE=velero-sa-p9-hourly  # el chart antepone "velero-" al nombre
 
               if kubectl get pvc "$PVC" -n sa-p9 >/dev/null 2>&1; then
                 log "El PVC $PVC ya existe (cluster en operacion): no se restaura nada."
@@ -117,9 +117,11 @@ spec:
                 [ -n "$BACKUP" ] && break
                 sleep 5
               done
+              # Sin respaldo se detiene: es preferible bloquear la wave 2 a levantar
+              # la plataforma con la base de datos vacia sin que nadie lo note.
               if [ -z "$BACKUP" ]; then
-                log "AVISO: no hay respaldos del schedule $SCHEDULE; MySQL arrancara con el volumen vacio."
-                exit 0
+                log "ERROR: no hay respaldos Completed del schedule $SCHEDULE."
+                exit 1
               fi
 
               RESTORE="restore-mysql-$BACKUP"
