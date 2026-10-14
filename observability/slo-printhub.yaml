@@ -1,0 +1,160 @@
+# P10: SLO de PrintHub, sus reglas de registro y las alertas por consumo del
+# presupuesto de error. Justificacion de cada numero: P10/docs/slo.md en el
+# repositorio de codigo.
+#
+# Ambos SLI se miden en el api-gateway: es la puerta por la que entra el
+# usuario (Ingress -> gateway), asi que lo que ve el gateway es lo que vive
+# el usuario, incluidos los fallos de los servicios de atras.
+#
+#   SLO 1 "Crear pedidos funciona":  99 % de POST /api/ordenes sin 5xx, ventana 28 dias
+#   SLO 2 "La API responde rapido":  99 % de peticiones /api/* en <= 0.5 s, ventana 28 dias
+#
+# Alertas (libro SRE de Google, "multiwindow, multi-burn-rate"): una alerta
+# salta solo si el presupuesto se esta quemando rapido en una ventana larga
+# (evita ruido de picos aislados) Y en una corta (deja de sonar en cuanto el
+# problema se corrige).
+#   rapida: burn rate 14.4 en 1h y 5m  -> 2 % del presupuesto en 1 h  -> page
+#   lenta:  burn rate 6    en 6h y 30m -> 5 % del presupuesto en 6 h  -> ticket
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: slo-printhub
+  namespace: observability
+spec:
+  groups:
+    # ------------------------------------------------------------ SLO 1
+    - name: slo-pedidos.reglas
+      interval: 30s
+      rules:
+        # Fraccion de intentos de pedido que fallaron por culpa del sistema (5xx).
+        # "or vector(0)": sin ningun 5xx la serie no existe y el cociente
+        # quedaria vacio en lugar de 0.
+        - record: slo:pedidos_errores:ratio_rate5m
+          expr: |
+            (sum(rate(printhub_http_request_duration_seconds_count{app_kubernetes_io_name="api-gateway", http_route="/api/ordenes", http_request_method="POST", http_response_status_code=~"5.."}[5m])) or vector(0))
+            / sum(rate(printhub_http_request_duration_seconds_count{app_kubernetes_io_name="api-gateway", http_route="/api/ordenes", http_request_method="POST"}[5m]))
+        - record: slo:pedidos_errores:ratio_rate30m
+          expr: |
+            (sum(rate(printhub_http_request_duration_seconds_count{app_kubernetes_io_name="api-gateway", http_route="/api/ordenes", http_request_method="POST", http_response_status_code=~"5.."}[30m])) or vector(0))
+            / sum(rate(printhub_http_request_duration_seconds_count{app_kubernetes_io_name="api-gateway", http_route="/api/ordenes", http_request_method="POST"}[30m]))
+        - record: slo:pedidos_errores:ratio_rate1h
+          expr: |
+            (sum(rate(printhub_http_request_duration_seconds_count{app_kubernetes_io_name="api-gateway", http_route="/api/ordenes", http_request_method="POST", http_response_status_code=~"5.."}[1h])) or vector(0))
+            / sum(rate(printhub_http_request_duration_seconds_count{app_kubernetes_io_name="api-gateway", http_route="/api/ordenes", http_request_method="POST"}[1h]))
+        - record: slo:pedidos_errores:ratio_rate6h
+          expr: |
+            (sum(rate(printhub_http_request_duration_seconds_count{app_kubernetes_io_name="api-gateway", http_route="/api/ordenes", http_request_method="POST", http_response_status_code=~"5.."}[6h])) or vector(0))
+            / sum(rate(printhub_http_request_duration_seconds_count{app_kubernetes_io_name="api-gateway", http_route="/api/ordenes", http_request_method="POST"}[6h]))
+        - record: slo:pedidos_errores:ratio_rate28d
+          expr: |
+            (sum(rate(printhub_http_request_duration_seconds_count{app_kubernetes_io_name="api-gateway", http_route="/api/ordenes", http_request_method="POST", http_response_status_code=~"5.."}[28d])) or vector(0))
+            / sum(rate(printhub_http_request_duration_seconds_count{app_kubernetes_io_name="api-gateway", http_route="/api/ordenes", http_request_method="POST"}[28d]))
+        - record: slo:pedidos:objetivo
+          expr: vector(0.99)
+        # Indicador (SLI): fraccion de pedidos atendidos sin error en la ventana.
+        - record: slo:pedidos:sli_28d
+          expr: 1 - slo:pedidos_errores:ratio_rate28d
+        # Presupuesto consumido: 1 = se gasto todo el margen de error de 28 dias.
+        - record: slo:pedidos:presupuesto_consumido_28d
+          expr: slo:pedidos_errores:ratio_rate28d / (1 - 0.99)
+
+    - name: slo-pedidos.alertas
+      rules:
+        - alert: PedidosPresupuestoQuemaRapida
+          expr: |
+            slo:pedidos_errores:ratio_rate1h > (14.4 * (1 - 0.99))
+            and
+            slo:pedidos_errores:ratio_rate5m > (14.4 * (1 - 0.99))
+          for: 1m
+          labels:
+            severity: page
+            slo: pedidos
+          annotations:
+            summary: "Los clientes no pueden crear pedidos ({{ $value | humanizePercentage }} de fallos en 5 min)"
+            description: >-
+              Se esta gastando el presupuesto de error de pedidos 14.4 veces mas rapido de lo
+              sostenible: a este ritmo se agota en menos de 2 dias. Cada minuto son pedidos
+              (ventas) perdidos.
+            runbook_url: https://github.com/GeoNufio1404/Practicas-SA-B-201901444/blob/main/P10/docs/runbooks/PedidosPresupuestoQuemaRapida.md
+        - alert: PedidosPresupuestoQuemaLenta
+          expr: |
+            slo:pedidos_errores:ratio_rate6h > (6 * (1 - 0.99))
+            and
+            slo:pedidos_errores:ratio_rate30m > (6 * (1 - 0.99))
+          for: 5m
+          labels:
+            severity: ticket
+            slo: pedidos
+          annotations:
+            summary: "Fallos sostenidos al crear pedidos ({{ $value | humanizePercentage }} en 30 min)"
+            description: >-
+              El presupuesto de error de pedidos se consume 6 veces mas rapido de lo
+              sostenible: a este ritmo se agota en menos de 5 dias. No es una caida, es una
+              degradacion que hay que corregir en horario laboral.
+            runbook_url: https://github.com/GeoNufio1404/Practicas-SA-B-201901444/blob/main/P10/docs/runbooks/PedidosPresupuestoQuemaLenta.md
+
+    # ------------------------------------------------------------ SLO 2
+    - name: slo-latencia.reglas
+      interval: 30s
+      rules:
+        # Fraccion de peticiones que tardaron mas de 0.5 s (cubeta le="0.5").
+        - record: slo:latencia_lentas:ratio_rate5m
+          expr: |
+            1 - sum(rate(printhub_http_request_duration_seconds_bucket{app_kubernetes_io_name="api-gateway", http_route=~"/api/.+", le="0.5"}[5m]))
+              / sum(rate(printhub_http_request_duration_seconds_count{app_kubernetes_io_name="api-gateway", http_route=~"/api/.+"}[5m]))
+        - record: slo:latencia_lentas:ratio_rate30m
+          expr: |
+            1 - sum(rate(printhub_http_request_duration_seconds_bucket{app_kubernetes_io_name="api-gateway", http_route=~"/api/.+", le="0.5"}[30m]))
+              / sum(rate(printhub_http_request_duration_seconds_count{app_kubernetes_io_name="api-gateway", http_route=~"/api/.+"}[30m]))
+        - record: slo:latencia_lentas:ratio_rate1h
+          expr: |
+            1 - sum(rate(printhub_http_request_duration_seconds_bucket{app_kubernetes_io_name="api-gateway", http_route=~"/api/.+", le="0.5"}[1h]))
+              / sum(rate(printhub_http_request_duration_seconds_count{app_kubernetes_io_name="api-gateway", http_route=~"/api/.+"}[1h]))
+        - record: slo:latencia_lentas:ratio_rate6h
+          expr: |
+            1 - sum(rate(printhub_http_request_duration_seconds_bucket{app_kubernetes_io_name="api-gateway", http_route=~"/api/.+", le="0.5"}[6h]))
+              / sum(rate(printhub_http_request_duration_seconds_count{app_kubernetes_io_name="api-gateway", http_route=~"/api/.+"}[6h]))
+        - record: slo:latencia_lentas:ratio_rate28d
+          expr: |
+            1 - sum(rate(printhub_http_request_duration_seconds_bucket{app_kubernetes_io_name="api-gateway", http_route=~"/api/.+", le="0.5"}[28d]))
+              / sum(rate(printhub_http_request_duration_seconds_count{app_kubernetes_io_name="api-gateway", http_route=~"/api/.+"}[28d]))
+        - record: slo:latencia:objetivo
+          expr: vector(0.99)
+        - record: slo:latencia:sli_28d
+          expr: 1 - slo:latencia_lentas:ratio_rate28d
+        - record: slo:latencia:presupuesto_consumido_28d
+          expr: slo:latencia_lentas:ratio_rate28d / (1 - 0.99)
+
+    - name: slo-latencia.alertas
+      rules:
+        - alert: LatenciaPresupuestoQuemaRapida
+          expr: |
+            slo:latencia_lentas:ratio_rate1h > (14.4 * (1 - 0.99))
+            and
+            slo:latencia_lentas:ratio_rate5m > (14.4 * (1 - 0.99))
+          for: 1m
+          labels:
+            severity: page
+            slo: latencia
+          annotations:
+            summary: "La tienda esta lenta: {{ $value | humanizePercentage }} de las peticiones tardan mas de 0.5 s"
+            description: >-
+              El presupuesto de latencia se gasta 14.4 veces mas rapido de lo sostenible.
+              Los usuarios perciben la aplicacion trabada y abandonan la compra.
+            runbook_url: https://github.com/GeoNufio1404/Practicas-SA-B-201901444/blob/main/P10/docs/runbooks/LatenciaPresupuestoQuemaRapida.md
+        - alert: LatenciaPresupuestoQuemaLenta
+          expr: |
+            slo:latencia_lentas:ratio_rate6h > (6 * (1 - 0.99))
+            and
+            slo:latencia_lentas:ratio_rate30m > (6 * (1 - 0.99))
+          for: 5m
+          labels:
+            severity: ticket
+            slo: latencia
+          annotations:
+            summary: "Lentitud sostenida: {{ $value | humanizePercentage }} de peticiones sobre 0.5 s en 30 min"
+            description: >-
+              El presupuesto de latencia se consume 6 veces mas rapido de lo sostenible.
+              Degradacion gradual (crecimiento de datos, recursos al limite): se corrige en
+              horario laboral.
+            runbook_url: https://github.com/GeoNufio1404/Practicas-SA-B-201901444/blob/main/P10/docs/runbooks/LatenciaPresupuestoQuemaLenta.md

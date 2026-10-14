@@ -1,0 +1,16 @@
+# P10: configuracion de observabilidad que depende de los CRDs y de Grafana
+# (wave 1): SLO, reglas de registro y alertas, y el tablero de operacion.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: observability
+resources:
+  - slo-printhub.yaml
+# El sidecar de Grafana carga todo ConfigMap con la etiqueta grafana_dashboard.
+configMapGenerator:
+  - name: tablero-operacion-printhub
+    files:
+      - dashboards/operacion-printhub.json
+    options:
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"
