@@ -64,6 +64,7 @@ ordenes-service:
 
 api-gateway:
   replicaCount: 2
+  preStopSleepSeconds: 10
   autoscaling:
     minReplicas: 2
   image:
