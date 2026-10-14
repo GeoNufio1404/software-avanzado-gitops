@@ -61,6 +61,9 @@ spec:
         # El operador solo detecta los CRDs presentes al arrancar: si arranca
         # antes de que exista el CRD Prometheus, nunca crea Prometheus. Con
         # esta wave interna ArgoCD aplica primero los CRDs y despues el operador.
+        # Los recursos Prometheus y Alertmanager van en la wave 2: ArgoCD espera
+        # a que esten sanos antes de pasar de wave y solo el operador puede
+        # ponerlos sanos (en la wave 0 bloqueaban al operador en un cluster nuevo).
         prometheusOperator:
           annotations:
             argocd.argoproj.io/sync-wave: "1"
@@ -70,6 +73,8 @@ spec:
         kubeEtcd: { enabled: false }
         kubeProxy: { enabled: false }
         prometheus:
+          annotations:
+            argocd.argoproj.io/sync-wave: "2"
           prometheusSpec:
             # Lee PodMonitor y PrometheusRule de cualquier namespace, sin
             # exigir la etiqueta "release" del chart.
@@ -81,6 +86,8 @@ spec:
               requests: { cpu: 200m, memory: 512Mi }
               limits: { cpu: "1", memory: 1536Mi }
         alertmanager:
+          annotations:
+            argocd.argoproj.io/sync-wave: "2"
           alertmanagerSpec:
             resources:
               requests: { cpu: 10m, memory: 32Mi }
