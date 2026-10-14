@@ -23,7 +23,6 @@ data:
     const USUARIO = { username: "generador-trafico", email: "generador@printhub.local", password: "Generador-2026" };
 
     export const options = {
-      summaryTrendStats: [],
       scenarios: {
         usuarios: {
           executor: "constant-arrival-rate",
@@ -92,7 +91,7 @@ spec:
       containers:
         - name: k6
           image: {{ $g.image }}
-          args: ["run", "--quiet", "--no-summary", "/scripts/generador.js"]
+          args: ["run", "--quiet", "--summary-mode=disabled", "/scripts/generador.js"]
           env:
             - name: BASE_URL
               value: http://{{ .Release.Name }}-api-gateway:8000
