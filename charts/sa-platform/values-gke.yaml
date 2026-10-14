@@ -61,18 +61,6 @@ ordenes-service:
   # P10: instrumentado con OpenTelemetry.
   telemetria:
     enabled: true
-  # P10, prueba sintoma -> causa: URL de figuras-service con una ruta que no
-  # existe (404). Helm reemplaza la lista completa, por eso se repiten las
-  # variables por defecto del subchart.
-  extraEnv:
-    - name: LOG_LEVEL
-      value: "info"
-    - name: BROKER_PREFETCH
-      value: "1"
-    - name: TZ
-      value: "America/Guatemala"
-    - name: FIGURAS_SERVICE_URL
-      value: "http://sa-platform-figuras-service:8002/graphql-v2"
 
 api-gateway:
   replicaCount: 2
