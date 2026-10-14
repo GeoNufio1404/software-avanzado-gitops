@@ -40,6 +40,7 @@ materiales-service:
 
 figuras-service:
   replicaCount: 2
+  preStopSleepSeconds: 10
   autoscaling:
     minReplicas: 2
   image:
@@ -51,6 +52,7 @@ figuras-service:
 
 ordenes-service:
   replicaCount: 2
+  preStopSleepSeconds: 10
   autoscaling:
     minReplicas: 2
   image:

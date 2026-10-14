@@ -52,6 +52,8 @@ telemetria:
   enabled: false
   otlpEndpoint: http://otel-collector.observability.svc:4318
   metricsPort: 9464
+# Segundos que el pod sigue atendiendo antes de apagarse (0 = sin espera).
+preStopSleepSeconds: 0
 env: {}
 extraEnv:
   - name: LOG_LEVEL

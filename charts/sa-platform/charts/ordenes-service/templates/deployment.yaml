@@ -72,6 +72,15 @@ spec:
             {{- include "sa.telemetriaEnv" (dict "root" $ "name" .Chart.Name "values" .Values) | nindent 12 }}
             {{- end }}
           {{- end }}
+          {{- with .Values.preStopSleepSeconds }}
+          # Al apagarse, el pod sigue atendiendo unos segundos mientras el
+          # Service deja de enviarle trafico; sin esto, las peticiones que
+          # llegan en ese intervalo fallan (5xx) en cada despliegue.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "{{ . }}"]
+          {{- end }}
           securityContext:
             {{- include "sa.containerSecurityContext" (dict "root" $) | nindent 12 }}
           volumeMounts:
