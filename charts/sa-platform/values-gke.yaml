@@ -75,18 +75,6 @@ api-gateway:
     enabled: true
   rollout:
     enabled: true
-  # P10, prueba del canary: fallo inducido en la version candidata (30 % de
-  # las peticiones a /api/ordenes responden 500). Helm reemplaza la lista
-  # completa, por eso se repiten las variables por defecto del subchart.
-  extraEnv:
-    - name: LOG_LEVEL
-      value: "info"
-    - name: UPSTREAM_TIMEOUT_MS
-      value: "5000"
-    - name: TZ
-      value: "America/Guatemala"
-    - name: FALLO_ORDENES_TASA
-      value: "0.3"
   ingress:
     enabled: true
     className: gce
