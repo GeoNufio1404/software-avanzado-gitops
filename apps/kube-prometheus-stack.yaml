@@ -58,6 +58,12 @@ spec:
                   query: '{service_name="$${__span.tags["service.name"]}"} | trace_id="$${__trace.traceId}"'
                 serviceMap:
                   datasourceUid: prometheus
+        # El operador solo detecta los CRDs presentes al arrancar: si arranca
+        # antes de que exista el CRD Prometheus, nunca crea Prometheus. Con
+        # esta wave interna ArgoCD aplica primero los CRDs y despues el operador.
+        prometheusOperator:
+          annotations:
+            argocd.argoproj.io/sync-wave: "1"
         # Componentes del plano de control que GKE no expone.
         kubeControllerManager: { enabled: false }
         kubeScheduler: { enabled: false }
