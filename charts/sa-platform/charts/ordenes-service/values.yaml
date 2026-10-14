@@ -29,6 +29,12 @@ networkPolicy:
 needsDbSecret: false
 needsAppSecret: false
 needsBrokerSecret: true
+# P10: OpenTelemetry (trazas/registros por OTLP, metricas en :metricsPort).
+# Apagado por defecto; se activa en values-gke.yaml junto con el stack.
+telemetria:
+  enabled: false
+  otlpEndpoint: http://otel-collector.observability.svc:4318
+  metricsPort: 9464
 env: {}
 extraEnv:
   - name: LOG_LEVEL

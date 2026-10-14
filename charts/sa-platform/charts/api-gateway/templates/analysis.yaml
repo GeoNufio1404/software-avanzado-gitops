@@ -1,89 +1,52 @@
 {{- if and .Values.enabled .Values.rollout.enabled }}
 {{- $fullname := include "sa.fullname" (dict "root" $ "name" .Chart.Name) }}
 {{- $a := .Values.rollout.analysis }}
-# Prueba de humo con k6 contra la version candidata (Service -canary).
-# k6 termina con codigo != 0 si se supera un umbral -> el Job falla ->
-# el AnalysisRun falla -> Argo Rollouts aborta y vuelve a la version estable.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ $fullname }}-smoke
-  namespace: {{ .Release.Namespace }}
-data:
-  smoke.js: |
-    import http from "k6/http";
-    import { check } from "k6";
-
-    const BASE = __ENV.BASE_URL;
-
-    // 401 es la respuesta correcta a un login invalido: no cuenta como fallo.
-    http.setResponseCallback(http.expectedStatuses(200, 401));
-
-    export const options = {
-      vus: {{ $a.vus }},
-      duration: "{{ $a.duration }}",
-      thresholds: {
-        http_req_failed: ["rate<{{ $a.maxFailedRate }}"],
-        http_req_duration: ["p(95)<{{ $a.p95Ms }}"],
-        checks: ["rate>{{ $a.minChecksRate }}"],
-      },
-    };
-
-    export default function () {
-      // /health del gateway consulta el /health de los 4 servicios internos
-      // (siempre responde 200: el estado real viene en el cuerpo).
-      const health = http.get(`${BASE}/health`);
-      check(health, {
-        "health 200": (r) => r.status === 200,
-        "servicios ok": (r) =>
-          Object.values(r.json("servicios") || {}).every((s) => s === "ok"),
-      });
-
-      // Enrutamiento gateway -> auth-service -> MySQL.
-      const login = http.post(
-        `${BASE}/api/auth/login`,
-        JSON.stringify({ username: "k6-smoke", password: "invalida" }),
-        { headers: { "Content-Type": "application/json" } },
-      );
-      check(login, { "login invalido 401": (r) => r.status === 401 });
-    }
----
+{{- /* Peticiones atendidas por los pods canary (por su pod-template-hash). */}}
+{{- $canary := printf "namespace=\"%s\", app_kubernetes_io_name=\"%s\", rollouts_pod_template_hash=\"{{args.canary-hash}}\"" .Release.Namespace .Chart.Name }}
+# P10: canary gobernado por metricas reales. En cada paso del Rollout se
+# consulta Prometheus sobre el trafico que atendieron SOLO los pods de la
+# version candidata (etiqueta rollouts_pod_template_hash). Si una metrica
+# falla mas de failureLimit veces, el AnalysisRun falla y Argo Rollouts
+# aborta y vuelve a la version estable sin intervencion.
+#
+# Sin datos (len(result) == 0 o NaN) cuenta como fallo: si no se puede
+# medir la version candidata, no se promueve.
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
-  name: {{ $fullname }}-smoke
+  name: {{ $fullname }}-metricas
   namespace: {{ .Release.Namespace }}
 spec:
+  args:
+    - name: canary-hash
   metrics:
-    - name: k6-smoke
+    - name: tasa-de-error
+      initialDelay: {{ $a.initialDelay }}
+      interval: {{ $a.interval }}
+      count: {{ $a.count }}
+      failureLimit: {{ $a.failureLimit }}
+      successCondition: len(result) == 1 && !isNaN(result[0]) && result[0] < {{ $a.maxErrorRate }}
       provider:
-        job:
-          spec:
-            backoffLimit: 0
-            ttlSecondsAfterFinished: 600
-            template:
-              spec:
-                restartPolicy: Never
-                securityContext:
-                  runAsNonRoot: true
-                  runAsUser: 12345
-                containers:
-                  - name: k6
-                    image: {{ $a.image }}
-                    args: ["run", "--quiet", "/scripts/smoke.js"]
-                    env:
-                      - name: BASE_URL
-                        value: http://{{ $fullname }}-canary:{{ .Values.service.port }}
-                    resources:
-                      requests: { cpu: 100m, memory: 128Mi }
-                      limits: { cpu: 300m, memory: 256Mi }
-                    securityContext:
-                      allowPrivilegeEscalation: false
-                    volumeMounts:
-                      - name: scripts
-                        mountPath: /scripts
-                volumes:
-                  - name: scripts
-                    configMap:
-                      name: {{ $fullname }}-smoke
+        prometheus:
+          address: {{ $a.prometheusAddress }}
+          query: |
+            (
+              sum(rate(printhub_http_request_duration_seconds_count{ {{- $canary }}, http_response_status_code=~"5.."}[{{ $a.window }}]))
+              or vector(0)
+            )
+            /
+            sum(rate(printhub_http_request_duration_seconds_count{ {{- $canary }}}[{{ $a.window }}]))
+    - name: latencia-p95
+      initialDelay: {{ $a.initialDelay }}
+      interval: {{ $a.interval }}
+      count: {{ $a.count }}
+      failureLimit: {{ $a.failureLimit }}
+      successCondition: len(result) == 1 && !isNaN(result[0]) && result[0] < {{ $a.maxP95Seconds }}
+      provider:
+        prometheus:
+          address: {{ $a.prometheusAddress }}
+          query: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(printhub_http_request_duration_seconds_bucket{ {{- $canary }}}[{{ $a.window }}]))
+            )
 {{- end }}

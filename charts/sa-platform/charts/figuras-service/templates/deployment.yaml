@@ -43,6 +43,11 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.service.port }}
+            {{- if .Values.telemetria.enabled }}
+            # Metricas OpenTelemetry (exportador Prometheus); las lee el PodMonitor.
+            - name: metrics
+              containerPort: {{ .Values.telemetria.metricsPort }}
+            {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "sa.fullname" (dict "root" $ "name" .Chart.Name) }}-config
@@ -58,9 +63,14 @@ spec:
             - secretRef:
                 name: {{ $.Release.Name }}-broker-credentials
             {{- end }}
-          {{- if .Values.extraEnv }}
+          {{- if or .Values.extraEnv .Values.telemetria.enabled }}
           env:
-            {{- include "sa.extraEnv" (dict "root" $ "list" .Values.extraEnv) | nindent 12 }}
+            {{- with .Values.extraEnv }}
+            {{- include "sa.extraEnv" (dict "root" $ "list" .) | nindent 12 }}
+            {{- end }}
+            {{- if .Values.telemetria.enabled }}
+            {{- include "sa.telemetriaEnv" (dict "root" $ "name" .Chart.Name "values" .Values) | nindent 12 }}
+            {{- end }}
           {{- end }}
           securityContext:
             {{- include "sa.containerSecurityContext" (dict "root" $) | nindent 12 }}

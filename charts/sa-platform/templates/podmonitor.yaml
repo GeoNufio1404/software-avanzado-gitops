@@ -1,0 +1,23 @@
+{{- if .Values.telemetria.podMonitor }}
+# P10: Prometheus lee el puerto "metrics" (exportador OpenTelemetry) de los
+# servicios instrumentados. Los pods sin ese puerto no se tocan.
+# rollouts-pod-template-hash pasa a ser la etiqueta rollouts_pod_template_hash
+# y permite al AnalysisTemplate medir solo los pods canary.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ .Release.Name }}-servicios
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sa.labels" (dict "root" $ "name" "telemetria") | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  podTargetLabels:
+    - app.kubernetes.io/name
+    - rollouts-pod-template-hash
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 15s
+{{- end }}

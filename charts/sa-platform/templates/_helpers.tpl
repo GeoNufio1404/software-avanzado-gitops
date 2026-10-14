@@ -71,3 +71,35 @@ Demuestra: range · required · default · quote
   value: {{ .value | default "" | quote }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+P10: variables de OpenTelemetry de un servicio instrumentado. El SDK (cargado
+con node --import ./src/instrumentacion.mjs) las lee al arrancar:
+trazas y registros por OTLP al collector, metricas en :<metricsPort>/metrics.
+service.version permite distinguir en trazas y registros la version canary.
+Uso: {{ include "sa.telemetriaEnv" (dict "root" $ "name" .Chart.Name "values" .Values) | nindent 12 }}
+*/}}
+{{- define "sa.telemetriaEnv" -}}
+- name: POD_NAME
+  valueFrom:
+    fieldRef:
+      fieldPath: metadata.name
+- name: OTEL_SERVICE_NAME
+  value: {{ .name | quote }}
+- name: OTEL_RESOURCE_ATTRIBUTES
+  value: {{ printf "service.version=%s,k8s.namespace.name=%s,k8s.pod.name=$(POD_NAME)" .values.image.tag .root.Release.Namespace | quote }}
+- name: OTEL_EXPORTER_OTLP_ENDPOINT
+  value: {{ .values.telemetria.otlpEndpoint | quote }}
+- name: OTEL_TRACES_EXPORTER
+  value: "otlp"
+- name: OTEL_LOGS_EXPORTER
+  value: "otlp"
+- name: OTEL_METRICS_EXPORTER
+  value: "prometheus"
+- name: OTEL_EXPORTER_PROMETHEUS_PORT
+  value: {{ .values.telemetria.metricsPort | quote }}
+- name: OTEL_NODE_ENABLED_INSTRUMENTATIONS
+  value: "http,express,undici,pino,amqplib,graphql"
+- name: OTEL_NODE_RESOURCE_DETECTORS
+  value: "env,host"
+{{- end -}}

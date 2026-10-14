@@ -23,17 +23,22 @@ rollout:
   enabled: false
   # Tres pasos de promocion; despues de cada uno corre el AnalysisTemplate.
   canaryWeights: [20, 50, 80]
+  # P10: el analisis consulta Prometheus (trafico real del canary), no un Job.
   analysis:
-    image: grafana/k6:2.3.0
-    # Umbrales de promocion (justificados en P9/docs).
-    # Hasta 1 % de peticiones/comprobaciones fallidas: tolera un fallo aislado
-    # (p. ej. un /health interno que excede su timeout de 2 s bajo carga) pero
-    # detecta una version defectuosa, que falla de forma sistematica.
-    maxFailedRate: "0.01"
-    minChecksRate: "0.99"
-    p95Ms: 500
-    vus: 5
-    duration: 30s
+    prometheusAddress: http://kube-prometheus-stack-prometheus.observability.svc:9090
+    # Ventana de las consultas. Con 2 m hay suficientes peticiones al canary
+    # aun cuando recibe solo una parte del trafico.
+    window: 2m
+    # Promueve si, medido SOLO en los pods canary:
+    #   tasa de error 5xx < 1 %  (mismo margen del SLO de pedidos: 99 %)
+    #   p95 de latencia < 0.5 s  (umbral del SLO de latencia)
+    maxErrorRate: "0.01"
+    maxP95Seconds: "0.5"
+    initialDelay: 1m
+    interval: 1m
+    count: 3
+    # Una medicion mala aislada se tolera; dos abortan y revierten.
+    failureLimit: 1
 needsDbSecret: false
 needsAppSecret: true
 needsBrokerSecret: false
@@ -41,6 +46,12 @@ ingress:
   enabled: true
   className: nginx
   host: sa-p5.local
+# P10: OpenTelemetry (trazas/registros por OTLP, metricas en :metricsPort).
+# Apagado por defecto; se activa en values-gke.yaml junto con el stack.
+telemetria:
+  enabled: false
+  otlpEndpoint: http://otel-collector.observability.svc:4318
+  metricsPort: 9464
 env: {}
 extraEnv:
   - name: LOG_LEVEL

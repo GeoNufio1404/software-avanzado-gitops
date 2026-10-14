@@ -194,3 +194,15 @@ api-gateway:
     enabled: true
     className: nginx
     host: sa-p5.local
+
+# P10: observabilidad. Apagada por defecto (dev/prod sin stack); se activa
+# en values-gke.yaml, donde existe el stack del namespace observability.
+telemetria:
+  # PodMonitor que Prometheus usa para leer las metricas de los servicios.
+  podMonitor: false
+
+generadorTrafico:
+  enabled: false
+  image: grafana/k6:2.3.0
+  # Peticiones por segundo (mitad pedidos, mitad consultas al catalogo).
+  rps: 4

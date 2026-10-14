@@ -14,7 +14,25 @@ spec:
   ingress:
     - ports:
         - port: {{ .Values.service.port }}
+    {{- if .Values.telemetria.enabled }}
+    # P10: Prometheus (namespace observability) lee las metricas.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - port: {{ .Values.telemetria.metricsPort }}
+    {{- end }}
   egress:
+    {{- if .Values.telemetria.enabled }}
+    # P10: trazas y registros por OTLP al collector.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - port: 4318
+    {{- end }}
     - to:
         - podSelector:
             matchLabels:

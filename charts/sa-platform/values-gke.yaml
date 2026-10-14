@@ -1,4 +1,4 @@
-# Ambiente GKE (P9). Se aplica encima de values.yaml.
+# Ambiente GKE (P9, ampliado en P10). Se aplica encima de values.yaml.
 # El pipeline de CI solo modifica las lineas "tag:" de este archivo mediante
 # un Pull Request (nunca despliega directamente).
 
@@ -45,6 +45,9 @@ figuras-service:
   image:
     repository: us-central1-docker.pkg.dev/project-2cbee419-ed7b-469e-89d/sa-p9/figuras-service
     tag: "1.0.1"
+  # P10: instrumentado con OpenTelemetry.
+  telemetria:
+    enabled: true
 
 ordenes-service:
   replicaCount: 2
@@ -53,6 +56,9 @@ ordenes-service:
   image:
     repository: us-central1-docker.pkg.dev/project-2cbee419-ed7b-469e-89d/sa-p9/ordenes-service
     tag: "1.0.1"
+  # P10: instrumentado con OpenTelemetry.
+  telemetria:
+    enabled: true
 
 api-gateway:
   replicaCount: 2
@@ -61,6 +67,9 @@ api-gateway:
   image:
     repository: us-central1-docker.pkg.dev/project-2cbee419-ed7b-469e-89d/sa-p9/api-gateway
     tag: "1.0.1"
+  # P10: instrumentado con OpenTelemetry.
+  telemetria:
+    enabled: true
   rollout:
     enabled: true
   ingress:
@@ -71,3 +80,10 @@ api-gateway:
 cronjobs:
   heartbeatImage: "us-central1-docker.pkg.dev/project-2cbee419-ed7b-469e-89d/sa-p9/cronjob-heartbeat:1.0.1"
   resumenImage: "us-central1-docker.pkg.dev/project-2cbee419-ed7b-469e-89d/sa-p9/cronjob-resumen:1.0.1"
+
+# P10: metricas de los servicios hacia Prometheus y trafico de usuarios simulado.
+telemetria:
+  podMonitor: true
+
+generadorTrafico:
+  enabled: true
