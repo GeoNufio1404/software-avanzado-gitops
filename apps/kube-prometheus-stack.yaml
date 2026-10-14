@@ -1,0 +1,88 @@
+# Wave 0 (P10): Prometheus, Alertmanager y Grafana en el namespace observability.
+# Trae los CRDs PodMonitor y PrometheusRule que usan la plataforma (wave 2)
+# y la configuracion de SLO y alertas (observability-config, wave 1).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 91.8.0
+    helm:
+      valuesObject:
+        # Las reglas y tableros por defecto no se usan: las unicas alertas son
+        # las de consumo del presupuesto de error (observability/slo) y el
+        # tablero es el de operacion de PrintHub.
+        defaultRules:
+          create: false
+        grafana:
+          defaultDashboardsEnabled: false
+          sidecar:
+            dashboards:
+              enabled: true
+              label: grafana_dashboard
+              searchNamespace: observability
+          # Loki y Tempo enlazados: de una traza a sus registros (por trace_id)
+          # y de un registro a su traza.
+          additionalDataSources:
+            - name: Loki
+              uid: loki
+              type: loki
+              url: http://loki.observability.svc:3100
+              jsonData:
+                derivedFields:
+                  - name: trace_id
+                    matcherType: label
+                    matcherRegex: trace_id
+                    datasourceUid: tempo
+                    url: "$${__value.raw}"
+            - name: Tempo
+              uid: tempo
+              type: tempo
+              url: http://tempo.observability.svc:3200
+              jsonData:
+                tracesToLogsV2:
+                  datasourceUid: loki
+                  spanStartTimeShift: "-5m"
+                  spanEndTimeShift: "5m"
+                  filterByTraceID: true
+                  customQuery: true
+                  query: '{service_name="$${__span.tags["service.name"]}"} | trace_id="$${__trace.traceId}"'
+                serviceMap:
+                  datasourceUid: prometheus
+        # Componentes del plano de control que GKE no expone.
+        kubeControllerManager: { enabled: false }
+        kubeScheduler: { enabled: false }
+        kubeEtcd: { enabled: false }
+        kubeProxy: { enabled: false }
+        prometheus:
+          prometheusSpec:
+            # Lee PodMonitor y PrometheusRule de cualquier namespace, sin
+            # exigir la etiqueta "release" del chart.
+            podMonitorSelectorNilUsesHelmValues: false
+            serviceMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+            retention: 3d
+            resources:
+              requests: { cpu: 200m, memory: 512Mi }
+              limits: { cpu: "1", memory: 1536Mi }
+        alertmanager:
+          alertmanagerSpec:
+            resources:
+              requests: { cpu: 10m, memory: 32Mi }
+              limits: { cpu: 100m, memory: 128Mi }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    # Los CRDs del operador superan el limite de anotaciones de kubectl apply.
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]

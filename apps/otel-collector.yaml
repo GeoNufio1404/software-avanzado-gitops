@@ -1,0 +1,63 @@
+# Wave 0 (P10): OpenTelemetry Collector. Punto unico de entrada OTLP de los
+# servicios: reparte trazas a Tempo y registros a Loki. Las metricas no pasan
+# por aqui: Prometheus las lee directo de cada pod (PodMonitor) para conservar
+# la etiqueta del pod canary.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: otel-collector
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+    chart: opentelemetry-collector
+    targetRevision: 0.173.1
+    helm:
+      valuesObject:
+        fullnameOverride: otel-collector
+        mode: deployment
+        image:
+          repository: otel/opentelemetry-collector-contrib
+        resources:
+          requests: { cpu: 50m, memory: 128Mi }
+          limits: { cpu: 500m, memory: 512Mi }
+        config:
+          receivers:
+            otlp:
+              protocols:
+                grpc: { endpoint: "0.0.0.0:4317" }
+                http: { endpoint: "0.0.0.0:4318" }
+          processors:
+            batch: {}
+            memory_limiter:
+              check_interval: 5s
+              limit_percentage: 80
+              spike_limit_percentage: 25
+          exporters:
+            otlp/tempo:
+              endpoint: tempo.observability.svc:4317
+              tls: { insecure: true }
+            otlphttp/loki:
+              endpoint: http://loki.observability.svc:3100/otlp
+          service:
+            pipelines:
+              traces:
+                receivers: [otlp]
+                processors: [memory_limiter, batch]
+                exporters: [otlp/tempo]
+              logs:
+                receivers: [otlp]
+                processors: [memory_limiter, batch]
+                exporters: [otlphttp/loki]
+              metrics: null
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true]

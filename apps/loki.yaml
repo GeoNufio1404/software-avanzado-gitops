@@ -1,0 +1,63 @@
+# Wave 0 (P10): almacen de registros. Recibe los registros JSON de los
+# servicios por OTLP (desde el collector), con trace_id/span_id como
+# metadatos estructurados, consultables por campo desde Grafana.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: loki
+    targetRevision: 7.3.0
+    helm:
+      valuesObject:
+        # Un solo proceso con disco local: suficiente para la practica.
+        deploymentMode: SingleBinary
+        loki:
+          auth_enabled: false
+          commonConfig:
+            replication_factor: 1
+          storage:
+            type: filesystem
+          schemaConfig:
+            configs:
+              - from: "2026-01-01"
+                store: tsdb
+                object_store: filesystem
+                schema: v13
+                index: { prefix: loki_index_, period: 24h }
+          limits_config:
+            allow_structured_metadata: true
+            retention_period: 72h
+          compactor:
+            retention_enabled: true
+            delete_request_store: filesystem
+        singleBinary:
+          replicas: 1
+          persistence:
+            size: 5Gi
+            storageClass: standard
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 1Gi }
+        read: { replicas: 0 }
+        write: { replicas: 0 }
+        backend: { replicas: 0 }
+        gateway: { enabled: false }
+        chunksCache: { enabled: false }
+        resultsCache: { enabled: false }
+        lokiCanary: { enabled: false }
+        test: { enabled: false }
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true]
