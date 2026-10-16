@@ -62,6 +62,7 @@ spec:
       rules:
         - alert: PedidosPresupuestoQuemaRapida
           expr: |
+            # burn rate del presupuesto de error: ventanas 1h y 5m
             slo:pedidos_errores:ratio_rate1h > (14.4 * (1 - 0.99))
             and
             slo:pedidos_errores:ratio_rate5m > (14.4 * (1 - 0.99))
@@ -78,6 +79,7 @@ spec:
             runbook_url: https://github.com/GeoNufio1404/Practicas-SA-B-201901444/blob/main/P10/docs/runbooks/PedidosPresupuestoQuemaRapida.md
         - alert: PedidosPresupuestoQuemaLenta
           expr: |
+            # burn rate del presupuesto de error: ventanas 6h y 30m
             slo:pedidos_errores:ratio_rate6h > (6 * (1 - 0.99))
             and
             slo:pedidos_errores:ratio_rate30m > (6 * (1 - 0.99))
@@ -129,6 +131,7 @@ spec:
       rules:
         - alert: LatenciaPresupuestoQuemaRapida
           expr: |
+            # burn rate del presupuesto de error: ventanas 1h y 5m
             slo:latencia_lentas:ratio_rate1h > (14.4 * (1 - 0.99))
             and
             slo:latencia_lentas:ratio_rate5m > (14.4 * (1 - 0.99))
@@ -144,6 +147,7 @@ spec:
             runbook_url: https://github.com/GeoNufio1404/Practicas-SA-B-201901444/blob/main/P10/docs/runbooks/LatenciaPresupuestoQuemaRapida.md
         - alert: LatenciaPresupuestoQuemaLenta
           expr: |
+            # burn rate del presupuesto de error: ventanas 6h y 30m
             slo:latencia_lentas:ratio_rate6h > (6 * (1 - 0.99))
             and
             slo:latencia_lentas:ratio_rate30m > (6 * (1 - 0.99))
